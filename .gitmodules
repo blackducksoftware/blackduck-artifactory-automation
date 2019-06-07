@@ -1,0 +1,3 @@
+[submodule "blackduck-artifactory"]
+	path = blackduck-artifactory
+	url = https://github.com/blackducksoftware/blackduck-artifactory.git
