@@ -1,15 +1,12 @@
-import artifactory.ArtifactoryApiService
 import artifactory.ArtifactoryUser
+import artifactory.SystemApiService
 import com.synopsys.integration.log.IntLogger
 import com.synopsys.integration.log.Slf4jIntLogger
-import com.synopsys.integration.rest.client.IntHttpClient
-import com.synopsys.integration.rest.proxy.ProxyInfo
 import org.apache.commons.io.IOUtils
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
-import java.net.URL
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
@@ -44,21 +41,18 @@ class Application(
         val artifactoryLicenseFile = File(artifactoryLicensePath)
         val licenseText = FileInputStream(artifactoryLicenseFile).convertToString().replace("\n", "").replace(" ", "")
 
+        logger.info("Installing and starting artifactory version: $artifactoryVersion")
+        val containerHash = dockerService.installAndStartArtifactory(artifactoryVersion, artifactoryPort)
+        logger.info("Artifactory container: $containerHash")
+
+        logger.info("Waiting for Artifactory startup.")
         val artifactoryUser = ArtifactoryUser(artifactoryUsername, artifactoryPassword)
-        val httpClientLogger = Slf4jIntLogger(LoggerFactory.getLogger(ArtifactoryApiService::class.java))
-        val httpClient = IntHttpClient(httpClientLogger, 200, true, ProxyInfo.NO_PROXY_INFO)
-        val artifactoryUrl = URL("$artifactoryBaseUrl:$artifactoryPort")
-        val artifactoryApiService = ArtifactoryApiService(httpClient, artifactoryUser, artifactoryUrl)
-//        logger.info("Installing and starting artifactory version: $artifactoryVersion")
-//        val containerHash = dockerService.installAndStartArtifactory(artifactoryVersion, artifactoryPort)
-//        logger.info("Artifactory container: $containerHash")
-//
-//        logger.info("Waiting for startup.")
-//        val systemApiService = SystemApiService(artifactoryApiService)
-//        systemApiService.waitForSuccessfulStartup()
-//
-//        logger.info("Applying Artifactory license.")
-//        systemApiService.applyLicense(licenseText)
+        val artifactoryUrl = "$artifactoryBaseUrl:$artifactoryPort"
+        val systemApiService = SystemApiService(artifactoryUser, artifactoryUrl)
+        systemApiService.waitForSuccessfulStartup()
+
+        logger.info("Applying Artifactory license.")
+        systemApiService.applyLicense(licenseText)
     }
 }
 
