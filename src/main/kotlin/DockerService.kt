@@ -17,7 +17,7 @@ class DockerService {
         }
 
         val startArtifactoryProcess = startArtifactory(version, artifactoryPort)
-        startArtifactoryProcess.waitFor(2, TimeUnit.MINUTES)
+        startArtifactoryProcess.waitFor(3, TimeUnit.MINUTES)
         if (startArtifactoryProcess.exitValue() != 0) {
             throw IntegrationException("Failed to start artifactory. Docker returned an exit code of ${startArtifactoryProcess.exitValue()}")
         }
@@ -27,18 +27,12 @@ class DockerService {
 
     @Throws(IOException::class)
     fun installArtifactory(version: String): Process {
-        return runDockerCommand("docker", "pull", String.format("docker.bintray.io/jfrog/artifactory-pro:%s", version))
+        return runDockerCommand("docker", "pull", "docker.bintray.io/jfrog/artifactory-pro:$version")
     }
 
     @Throws(IOException::class)
     fun startArtifactory(version: String, artifactoryPort: String): Process {
-        return runDockerCommand(
-            "docker", "run", "--name",
-            String.format("artifactory-automation-%s", version),
-            "-d", "-p",
-            String.format("%s:%s", artifactoryPort, artifactoryPort),
-            String.format("docker.bintray.io/jfrog/artifactory-pro:%s", version)
-        )
+        return runDockerCommand("docker", "run", "--name", "artifactory-automation-$version", "-d", "-p", "$artifactoryPort:$artifactoryPort", "docker.bintray.io/jfrog/artifactory-pro:$version")
     }
 
     @Throws(IOException::class)
