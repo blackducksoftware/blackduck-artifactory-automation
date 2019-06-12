@@ -28,6 +28,8 @@ repositories {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    implementation "com.blackducksoftware.integration:blackduck-common:43.0.0"
+    implementation 'org.slf4j:slf4j-log4j12:1.7.26'
     implementation project(":blackduck-artifactory")
     implementation project(":blackduck-artifactory:blackduck-artifactory-common")
 }
