@@ -1,6 +1,7 @@
 import artifactory.ArtifactoryUser
 import artifactory.SystemApiService
 import com.synopsys.integration.blackduck.configuration.BlackDuckServerConfigBuilder
+import com.synopsys.integration.exception.IntegrationException
 import com.synopsys.integration.log.IntLogger
 import com.synopsys.integration.log.Slf4jIntLogger
 import org.apache.commons.io.IOUtils
@@ -46,15 +47,18 @@ class Application(
     private val logger: IntLogger = Slf4jIntLogger(LoggerFactory.getLogger(this.javaClass))
 
     init {
-        logger.info("Building BlackDuckServerConfig.")
+        logger.info("Verifying Black Duck server config.")
         val blackDuckServerConfig = BlackDuckServerConfigBuilder()
             .setUrl(blackduckUrl)
             .setUsername(blackDuckUsername)
             .setPassword(blackDuckPassword)
             .setTrustCert(blackDuckTrustCert.toBoolean())
             .build()
+        if (!blackDuckServerConfig.canConnect(logger)) {
+            throw IntegrationException("Failed to connect the Black Duck server at $blackduckUrl.")
+        }
 
-        logger.info("Loading Artifactory License.")
+        logger.info("Loading Artifactory license.")
         val artifactoryLicenseFile = File(artifactoryLicensePath)
         val licenseText = FileInputStream(artifactoryLicenseFile).convertToString().replace("\n", "").replace(" ", "")
 
