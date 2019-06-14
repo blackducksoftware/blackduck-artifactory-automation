@@ -5,6 +5,8 @@ import com.synopsys.integration.log.Slf4jIntLogger
 import convertToString
 import org.apache.commons.lang3.StringUtils
 import org.slf4j.LoggerFactory
+import java.io.File
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 class DockerService {
@@ -32,6 +34,24 @@ class DockerService {
 
     fun startArtifactory(version: String, artifactoryPort: String, inheritIO: Boolean = true): Process {
         return runCommand("docker", "run", "--name", "artifactory-automation-$version", "-d", "-p", "$artifactoryPort:$artifactoryPort", "docker.bintray.io/jfrog/artifactory-pro:$version", inheritIO = inheritIO)
+    }
+
+    fun getArtifactoryLogs(containerHash: String): InputStream {
+        val process = runCommand("docker", "logs", containerHash)
+        process.waitFor()
+        return process.inputStream
+    }
+
+    fun uploadFile(containerHash: String, file: File, location: String): Process {
+        return runCommand("docker", "cp", file.canonicalPath, "$containerHash:$location")
+    }
+
+    fun chownFile(containerHash: String, owner: String, group: String, filePath: String): Process {
+        return runCommand("docker", "exec", "--user=root", containerHash, "chown", "-R", "$owner:$group", filePath)
+    }
+
+    fun chmodFile(containerHash: String, permissions: String, filePath: String): Process {
+        return runCommand("docker", "exec", "--user=root", containerHash, "chmod", "-R", permissions, filePath)
     }
 
     private fun runCommand(vararg command: String, inheritIO: Boolean = true): Process {

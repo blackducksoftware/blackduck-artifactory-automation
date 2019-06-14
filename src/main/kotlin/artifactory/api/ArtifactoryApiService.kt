@@ -15,7 +15,7 @@ abstract class ArtifactoryApiService(
 
 fun Response.validate(): Response {
     if (this.isClientError || this.isServerError || this.statusCode < 0) {
-        throw IntegrationException("Status Code: ${this.statusCode}, Message: ${this.responseMessage}")
+        throw IntegrationException("Status Code: ${this.statusCode}, Content: ${this}")
     }
     return this
 }

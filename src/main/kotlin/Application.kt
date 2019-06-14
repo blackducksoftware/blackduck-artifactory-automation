@@ -1,4 +1,5 @@
 import artifactory.api.ArtifactoryUser
+import artifactory.api.PluginsApiService
 import artifactory.api.SystemApiService
 import com.github.kittinunf.fuel.core.FuelManager
 import com.synopsys.integration.blackduck.configuration.BlackDuckServerConfigBuilder
@@ -8,6 +9,7 @@ import com.synopsys.integration.log.Slf4jIntLogger
 import docker.DockerService
 import org.apache.commons.io.IOUtils
 import org.slf4j.LoggerFactory
+import plugin.BlackDuckPluginService
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -25,12 +27,13 @@ fun main() {
         configManager.getOrDefault(Config.ARTIFACTORY_USERNAME, "admin"),
         configManager.getOrDefault(Config.ARTIFACTORY_PASSWORD, "password"),
         configManager.getOrDefault(Config.ARTIFACTORY_VERSION, "latest"),
-        configManager.getOrDefault(Config.ARTIFACTORY_LICENSE_PATH, ""),
+        File(configManager.getOrDefault(Config.ARTIFACTORY_LICENSE_PATH, "")),
         configManager.getOrThrow(Config.BLACKDUCK_URL),
         configManager.getOrDefault(Config.BLACKDUCK_USERNAME, "sysadmin"),
         configManager.getOrDefault(Config.BLACKDUCK_PASSWORD, "blackduck"),
         configManager.getOrDefault(Config.BLACKDUCK_TRUST_CERT, "true").toBoolean(),
-        configManager.getOrDefault(Config.MANAGE_ARTIFACTORY, "true").toBoolean()
+        configManager.getOrDefault(Config.MANAGE_ARTIFACTORY, "true").toBoolean(),
+        File(configManager.getOrThrow(Config.PLUGIN_ZIP_PATH))
     )
 }
 
@@ -41,12 +44,13 @@ class Application(
     artifactoryUsername: String,
     artifactoryPassword: String,
     artifactoryVersion: String,
-    artifactoryLicensePath: String,
+    artifactoryLicenseFile: File,
     blackduckUrl: String,
     blackDuckUsername: String,
     blackDuckPassword: String,
     blackDuckTrustCert: Boolean,
-    manageArtifactory: Boolean
+    manageArtifactory: Boolean,
+    pluginZipFile: File
 ) {
     private val logger: IntLogger = Slf4jIntLogger(LoggerFactory.getLogger(this.javaClass))
 
@@ -69,14 +73,20 @@ class Application(
 
         if (manageArtifactory) {
             logger.info("Loading Artifactory license.")
-            if (artifactoryLicensePath.isBlank()) {
-                throw IntegrationException("You have chosen to let automation manage Artifactory, but a license key file path was not supplied.")
+            if (!artifactoryLicenseFile.exists()) {
+                throw IntegrationException("You have chosen to let automation manage Artifactory, but a the license key file supplied at ${artifactoryLicenseFile.absolutePath} does not exist.")
             }
-            val artifactoryLicenseFile = File(artifactoryLicensePath)
             val licenseText = FileInputStream(artifactoryLicenseFile)
                 .convertToString()
                 .replace("\n", "")
                 .replace(" ", "")
+
+            logger.info("Validating plugin zip file.")
+            if (pluginZipFile.exists()) {
+                logger.info("Plugin zip file found at ${pluginZipFile.canonicalPath}")
+            } else {
+                throw IntegrationException("You have chosen to let automation manage Artifactory, but the plugin zip file at ${pluginZipFile.absolutePath} does not exist.")
+            }
 
             logger.info("Installing and starting Artifactory version: $artifactoryVersion")
             val containerHash = dockerService.installAndStartArtifactory(artifactoryVersion, artifactoryPort)
@@ -88,6 +98,15 @@ class Application(
 
             logger.info("Applying Artifactory license.")
             systemApiService.applyLicense(licenseText)
+
+            logger.info("Installing plugin.")
+            val pluginsApiService = PluginsApiService(fuelManager, artifactoryUser)
+            val blackDuckPluginService = BlackDuckPluginService(dockerService)
+            blackDuckPluginService.installPlugin(pluginZipFile, blackDuckServerConfig, containerHash)
+            pluginsApiService.reloadPlugins()
+            logger.info("Successfully installed the plugin.")
+
+            println(dockerService.getArtifactoryLogs(containerHash).convertToString())
         } else {
             logger.info("Skipping Artifactory installation.")
         }
