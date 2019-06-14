@@ -5,6 +5,7 @@ import com.synopsys.integration.blackduck.configuration.BlackDuckServerConfigBui
 import com.synopsys.integration.exception.IntegrationException
 import com.synopsys.integration.log.IntLogger
 import com.synopsys.integration.log.Slf4jIntLogger
+import docker.DockerService
 import org.apache.commons.io.IOUtils
 import org.slf4j.LoggerFactory
 import java.io.File
