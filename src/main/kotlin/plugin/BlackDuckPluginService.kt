@@ -1,5 +1,6 @@
 package plugin
 
+import com.synopsys.integration.blackduck.artifactory.configuration.ConfigurationProperty
 import com.synopsys.integration.blackduck.artifactory.configuration.GeneralProperty
 import com.synopsys.integration.blackduck.configuration.BlackDuckServerConfig
 import com.synopsys.integration.exception.IntegrationException
@@ -12,33 +13,31 @@ import java.util.*
 
 class BlackDuckPluginService(private val dockerService: DockerService) {
     private val logger = Slf4jIntLogger(LoggerFactory.getLogger(javaClass))
+    private val dockerPluginsDirectory = "/opt/jfrog/artifactory/etc/plugins"
 
     fun installPlugin(zipFile: File, blackDuckServerConfig: BlackDuckServerConfig, containerHash: String) {
         logger.info("Unzipping plugin.")
         val unzippedPluginDirectory = unzipFile(zipFile, zipFile.parentFile)
         val propertiesFile = File(unzippedPluginDirectory, "lib/blackDuckPlugin.properties")
 
-        logger.info("Rewriting properties.")
-        setProperties(propertiesFile, blackDuckServerConfig)
-
         logger.info("Uploading plugin files.")
         val uploadProcesses = mutableListOf<Process>()
         unzippedPluginDirectory.listFiles().forEach {
-            val process = dockerService.uploadFile(containerHash, it, "/opt/jfrog/artifactory/etc/plugins")
+            val process = dockerService.uploadFile(containerHash, it, dockerPluginsDirectory)
             uploadProcesses.add(process)
         }
         uploadProcesses.forEach {
             it.waitFor()
         }
 
-        logger.info("Fixing permissions.")
-        val chownProcess = dockerService.chownFile(containerHash, "artifactory", "artifactory", "/opt/jfrog/artifactory/etc/plugins/")
-        chownProcess.waitFor()
-        val chmodProcess = dockerService.chmodFile(containerHash, "777", "/opt/jfrog/artifactory/etc/plugins/")
-        chmodProcess.waitFor()
+        logger.info("Rewriting properties.")
+        initializeProperties(containerHash, propertiesFile, blackDuckServerConfig)
+
+        logger.info("Updating logback.xml for logger purposes.")
+        // TODO: Modify the logback.xml file
     }
 
-    private fun setProperties(propertiesFile: File, blackDuckServerConfig: BlackDuckServerConfig) {
+    private fun initializeProperties(containerHash: String, propertiesFile: File, blackDuckServerConfig: BlackDuckServerConfig) {
         val properties = Properties()
         val propertiesInputStream = propertiesFile.inputStream()
         properties.load(propertiesInputStream)
@@ -53,17 +52,43 @@ class BlackDuckPluginService(private val dockerService: DockerService) {
             credentials.password.ifPresent { password = it }
         }
 
-        properties[GeneralProperty.USERNAME.key] = username
-        properties[GeneralProperty.PASSWORD.key] = password
-        properties[GeneralProperty.API_TOKEN.key] = blackDuckServerConfig.apiToken.orElse("")
-        properties[GeneralProperty.TIMEOUT.key] = blackDuckServerConfig.timeout.toString()
-        properties[GeneralProperty.PROXY_HOST.key] = blackDuckServerConfig.proxyInfo.host.orElse("")
-        properties[GeneralProperty.PROXY_PORT.key] = blackDuckServerConfig.proxyInfo.port.toString()
-        properties[GeneralProperty.PROXY_USERNAME.key] = blackDuckServerConfig.proxyInfo.username.orElse("")
-        properties[GeneralProperty.PROXY_PASSWORD.key] = blackDuckServerConfig.proxyInfo.password.orElse("")
-        properties[GeneralProperty.TRUST_CERT.key] = blackDuckServerConfig.isAlwaysTrustServerCertificate.toString()
+        updateProperties(
+            containerHash,
+            propertiesFile,
+            Pair(GeneralProperty.USERNAME, username),
+            Pair(GeneralProperty.PASSWORD, password),
+            Pair(GeneralProperty.API_TOKEN, blackDuckServerConfig.apiToken.orElse("")),
+            Pair(GeneralProperty.TIMEOUT, blackDuckServerConfig.timeout.toString()),
+            Pair(GeneralProperty.PROXY_HOST, blackDuckServerConfig.proxyInfo.host.orElse("")),
+            Pair(GeneralProperty.PROXY_PORT, blackDuckServerConfig.proxyInfo.port.toString()),
+            Pair(GeneralProperty.PROXY_USERNAME, blackDuckServerConfig.proxyInfo.username.orElse("")),
+            Pair(GeneralProperty.PROXY_PASSWORD, blackDuckServerConfig.proxyInfo.password.orElse("")),
+            Pair(GeneralProperty.TRUST_CERT, blackDuckServerConfig.isAlwaysTrustServerCertificate.toString())
+        )
+    }
+
+    private fun updateProperties(containerHash: String, propertiesFile: File, vararg propertyPairs: Pair<ConfigurationProperty, String>) {
+        val properties = Properties()
+        val propertiesInputStream = propertiesFile.inputStream()
+        properties.load(propertiesInputStream)
+        propertiesInputStream.close()
+
+        propertyPairs.forEach {
+            properties[it.first.key] = it.second
+        }
 
         properties.store(FileOutputStream(propertiesFile), "Modified automation properties")
+
+        dockerService.uploadFile(containerHash, propertiesFile, "$dockerPluginsDirectory/lib/")
+        fixPermissions(containerHash)
+    }
+
+    fun fixPermissions(containerHash: String) {
+        logger.info("Fixing permissions.")
+        val chownProcess = dockerService.chownFile(containerHash, "artifactory", "artifactory", dockerPluginsDirectory)
+        chownProcess.waitFor()
+        val chmodProcess = dockerService.chmodFile(containerHash, "777", dockerPluginsDirectory)
+        chmodProcess.waitFor()
     }
 
     private fun unzipFile(zipFile: File, outputDirectory: File): File {

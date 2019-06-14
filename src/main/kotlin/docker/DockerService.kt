@@ -9,6 +9,7 @@ import java.io.File
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
+// TODO: Make DockerService more generic
 class DockerService {
     private val logger = Slf4jIntLogger(LoggerFactory.getLogger(javaClass))
 
