@@ -33,7 +33,8 @@ fun main() {
         configManager.getOrDefault(Config.BLACKDUCK_PASSWORD, "blackduck"),
         configManager.getOrDefault(Config.BLACKDUCK_TRUST_CERT, "true").toBoolean(),
         configManager.getOrDefault(Config.MANAGE_ARTIFACTORY, "true").toBoolean(),
-        File(configManager.getOrThrow(Config.PLUGIN_ZIP_PATH))
+        File(configManager.getOrThrow(Config.PLUGIN_ZIP_PATH)),
+        configManager.getOrDefault(Config.PLUGIN_LOGGING_LEVEL, "DEBUG")
     )
 }
 
@@ -50,7 +51,8 @@ class Application(
     blackDuckPassword: String,
     blackDuckTrustCert: Boolean,
     manageArtifactory: Boolean,
-    pluginZipFile: File
+    pluginZipFile: File,
+    pluginLoggingLevel: String
 ) {
     private val logger: IntLogger = Slf4jIntLogger(LoggerFactory.getLogger(this.javaClass))
 
@@ -90,6 +92,7 @@ class Application(
 
             logger.info("Installing and starting Artifactory version: $artifactoryVersion")
             val containerHash = dockerService.installAndStartArtifactory(artifactoryVersion, artifactoryPort)
+//            val containerHash = "artifactory-automation-latest"
             logger.info("Artifactory container: $containerHash")
 
             logger.info("Waiting for Artifactory startup.")
@@ -102,8 +105,9 @@ class Application(
             logger.info("Installing plugin.")
             val pluginsApiService = PluginsApiService(fuelManager, artifactoryUser)
             val blackDuckPluginService = BlackDuckPluginService(dockerService)
-            blackDuckPluginService.installPlugin(pluginZipFile, blackDuckServerConfig, containerHash)
-            pluginsApiService.reloadPlugins()
+            blackDuckPluginService.installPlugin(containerHash, pluginZipFile, blackDuckServerConfig, pluginLoggingLevel)
+            //Thread.sleep(10000L)
+            //pluginsApiService.reloadPlugins()
             logger.info("Successfully installed the plugin.")
 
             println(dockerService.getArtifactoryLogs(containerHash).convertToString())

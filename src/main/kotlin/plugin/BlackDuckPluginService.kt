@@ -10,40 +10,77 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileOutputStream
 import java.util.*
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.Transformer
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
 
 class BlackDuckPluginService(private val dockerService: DockerService) {
     private val logger = Slf4jIntLogger(LoggerFactory.getLogger(javaClass))
-    private val dockerPluginsDirectory = "/opt/jfrog/artifactory/etc/plugins"
+    private val artifactoryEtcDirectory = "/opt/jfrog/artifactory/etc"
+    private val dockerPluginsDirectory = "$artifactoryEtcDirectory/plugins"
 
-    fun installPlugin(zipFile: File, blackDuckServerConfig: BlackDuckServerConfig, containerHash: String) {
+    fun installPlugin(containerHash: String, zipFile: File, blackDuckServerConfig: BlackDuckServerConfig, pluginLoggingLevel: String) {
+        logger.info("Shutting down Artifactory container.")
+        dockerService.stopArtifactory(containerHash).waitFor()
+
         logger.info("Unzipping plugin.")
-        val unzippedPluginDirectory = unzipFile(zipFile, zipFile.parentFile)
+        val unzippedPluginDirectory = unzipFile(zipFile, File(zipFile.parentFile, "output"))
         val propertiesFile = File(unzippedPluginDirectory, "lib/blackDuckPlugin.properties")
 
         logger.info("Uploading plugin files.")
-        val uploadProcesses = mutableListOf<Process>()
-        unzippedPluginDirectory.listFiles().forEach {
-            val process = dockerService.uploadFile(containerHash, it, dockerPluginsDirectory)
-            uploadProcesses.add(process)
-        }
-        uploadProcesses.forEach {
-            it.waitFor()
-        }
+        unzippedPluginDirectory.listFiles()
+            .filter { !it.startsWith(".") }
+            .forEach {
+                dockerService.uploadFile(containerHash, it, dockerPluginsDirectory).waitFor()
+            }
 
         logger.info("Rewriting properties.")
         initializeProperties(containerHash, propertiesFile, blackDuckServerConfig)
 
         logger.info("Updating logback.xml for logger purposes.")
-        // TODO: Modify the logback.xml file
+        val logbackXmlFile = File(unzippedPluginDirectory, "logback.xml")
+        val logbackXmlLocation = "$artifactoryEtcDirectory/logback.xml"
+        dockerService.downloadFile(containerHash, logbackXmlFile, logbackXmlLocation).waitFor()
+        updateLogbackXml(logbackXmlFile, pluginLoggingLevel)
+        dockerService.uploadFile(containerHash, logbackXmlFile, logbackXmlLocation).waitFor()
+
+        logger.info("Starting Artifactory container.")
+        dockerService.startArtifactory(containerHash).waitFor()
+
+        fixPermissions(containerHash, dockerPluginsDirectory)
+        fixPermissions(containerHash, logbackXmlLocation, "0644")
+    }
+
+    private fun updateLogbackXml(xmlFile: File, loggingLevel: String) {
+        val dbFactory = DocumentBuilderFactory.newInstance()
+        val dBuilder = dbFactory.newDocumentBuilder()
+        val document = dBuilder.parse(xmlFile)
+
+        val synopsysLoggerElement = document.createElement("logger")
+        synopsysLoggerElement.setAttribute("name", "com.synopsys")
+        val synopsysLoggingLevelElement = document.createElement("level")
+        synopsysLoggingLevelElement.setAttribute("value", loggingLevel)
+        synopsysLoggerElement.appendChild(synopsysLoggingLevelElement)
+
+        val blackduckLoggerElement = document.createElement("logger")
+        blackduckLoggerElement.setAttribute("name", "com.blackducksoftware")
+        val blackDuckLoggingLevelElement = document.createElement("level")
+        blackDuckLoggingLevelElement.setAttribute("value", loggingLevel)
+        blackduckLoggerElement.appendChild(blackDuckLoggingLevelElement)
+
+        document.documentElement.appendChild(synopsysLoggerElement)
+        document.documentElement.appendChild(blackduckLoggerElement)
+
+        val transformer: Transformer = TransformerFactory.newInstance().newTransformer()
+        transformer.setOutputProperty(OutputKeys.INDENT, "yes")
+        transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2")
+        transformer.transform(DOMSource(document), StreamResult(xmlFile))
     }
 
     private fun initializeProperties(containerHash: String, propertiesFile: File, blackDuckServerConfig: BlackDuckServerConfig) {
-        val properties = Properties()
-        val propertiesInputStream = propertiesFile.inputStream()
-        properties.load(propertiesInputStream)
-        propertiesInputStream.close()
-
-        properties[GeneralProperty.URL.key] = blackDuckServerConfig.blackDuckUrl.toString()
         val credentialsOptional = blackDuckServerConfig.credentials
         var username = ""
         var password = ""
@@ -55,6 +92,7 @@ class BlackDuckPluginService(private val dockerService: DockerService) {
         updateProperties(
             containerHash,
             propertiesFile,
+            Pair(GeneralProperty.URL, blackDuckServerConfig.blackDuckUrl.toString()),
             Pair(GeneralProperty.USERNAME, username),
             Pair(GeneralProperty.PASSWORD, password),
             Pair(GeneralProperty.API_TOKEN, blackDuckServerConfig.apiToken.orElse("")),
@@ -80,18 +118,16 @@ class BlackDuckPluginService(private val dockerService: DockerService) {
         properties.store(FileOutputStream(propertiesFile), "Modified automation properties")
 
         dockerService.uploadFile(containerHash, propertiesFile, "$dockerPluginsDirectory/lib/")
-        fixPermissions(containerHash)
     }
 
-    fun fixPermissions(containerHash: String) {
+    fun fixPermissions(containerHash: String, location: String, permission: String = "0755") {
         logger.info("Fixing permissions.")
-        val chownProcess = dockerService.chownFile(containerHash, "artifactory", "artifactory", dockerPluginsDirectory)
-        chownProcess.waitFor()
-        val chmodProcess = dockerService.chmodFile(containerHash, "777", dockerPluginsDirectory)
-        chmodProcess.waitFor()
+        dockerService.chownFile(containerHash, "artifactory", "artifactory", location).waitFor()
+        dockerService.chmodFile(containerHash, permission, location).waitFor()
     }
 
     private fun unzipFile(zipFile: File, outputDirectory: File): File {
+        outputDirectory.deleteRecursively()
         val process = ProcessBuilder()
             .command("unzip", "-o", zipFile.canonicalPath, "-d", outputDirectory.canonicalPath)
             .inheritIO()
@@ -102,6 +138,6 @@ class BlackDuckPluginService(private val dockerService: DockerService) {
             throw IntegrationException("unzip returned a non-zero exit code: $exitCode")
         }
 
-        return File(zipFile.parent, zipFile.name.replace(".zip", ""))
+        return File(outputDirectory, zipFile.name.replace(".zip", ""))
     }
 }
