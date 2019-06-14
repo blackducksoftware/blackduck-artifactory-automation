@@ -1,4 +1,4 @@
-package artifactory
+package artifactory.api
 
 import com.github.kittinunf.fuel.core.Response
 import com.github.kittinunf.fuel.core.extensions.jsonBody

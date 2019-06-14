@@ -1,4 +1,4 @@
-package artifactory
+package artifactory.api
 
 import com.github.kittinunf.fuel.core.FuelManager
 import com.github.kittinunf.fuel.core.Request
@@ -9,7 +9,7 @@ import com.synopsys.integration.exception.IntegrationException
 
 abstract class ArtifactoryApiService(
     private val artifactoryUser: ArtifactoryUser,
-    baseUrl: String
+    private val baseUrl: String
 ) {
     init {
         FuelManager.instance.basePath = "$baseUrl/artifactory"

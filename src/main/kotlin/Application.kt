@@ -1,5 +1,5 @@
-import artifactory.ArtifactoryUser
-import artifactory.SystemApiService
+import artifactory.api.ArtifactoryUser
+import artifactory.api.SystemApiService
 import com.synopsys.integration.blackduck.configuration.BlackDuckServerConfigBuilder
 import com.synopsys.integration.exception.IntegrationException
 import com.synopsys.integration.log.IntLogger
@@ -23,11 +23,12 @@ fun main() {
         configManager.getOrDefault(Config.ARTIFACTORY_USERNAME, "admin"),
         configManager.getOrDefault(Config.ARTIFACTORY_PASSWORD, "password"),
         configManager.getOrDefault(Config.ARTIFACTORY_VERSION, "latest"),
-        configManager.getOrThrow(Config.ARTIFACTORY_LICENSE_PATH),
+        configManager.getOrDefault(Config.ARTIFACTORY_LICENSE_PATH, ""),
         configManager.getOrThrow(Config.BLACKDUCK_URL),
         configManager.getOrDefault(Config.BLACKDUCK_USERNAME, "sysadmin"),
         configManager.getOrDefault(Config.BLACKDUCK_PASSWORD, "blackduck"),
-        configManager.getOrDefault(Config.BLACKDUCK_TRUST_CERT, "true")
+        configManager.getOrDefault(Config.BLACKDUCK_TRUST_CERT, "true").toBoolean(),
+        configManager.getOrDefault(Config.MANAGE_ARTIFACTORY, "true").toBoolean()
     )
 }
 
@@ -42,7 +43,8 @@ class Application(
     private val blackduckUrl: String,
     private val blackDuckUsername: String,
     private val blackDuckPassword: String,
-    private val blackDuckTrustCert: String
+    private val blackDuckTrustCert: Boolean,
+    private val manageArtifactory: Boolean
 ) {
     private val logger: IntLogger = Slf4jIntLogger(LoggerFactory.getLogger(this.javaClass))
 
@@ -52,28 +54,38 @@ class Application(
             .setUrl(blackduckUrl)
             .setUsername(blackDuckUsername)
             .setPassword(blackDuckPassword)
-            .setTrustCert(blackDuckTrustCert.toBoolean())
+            .setTrustCert(blackDuckTrustCert)
             .build()
         if (!blackDuckServerConfig.canConnect(logger)) {
-            throw IntegrationException("Failed to connect the Black Duck server at $blackduckUrl.")
+            // throw IntegrationException("Failed to connect the Black Duck server at $blackduckUrl.")
         }
 
-        logger.info("Loading Artifactory license.")
-        val artifactoryLicenseFile = File(artifactoryLicensePath)
-        val licenseText = FileInputStream(artifactoryLicenseFile).convertToString().replace("\n", "").replace(" ", "")
-
-        logger.info("Installing and starting Artifactory version: $artifactoryVersion")
-        val containerHash = dockerService.installAndStartArtifactory(artifactoryVersion, artifactoryPort)
-        logger.info("Artifactory container: $containerHash")
-
-        logger.info("Waiting for Artifactory startup.")
         val artifactoryUser = ArtifactoryUser(artifactoryUsername, artifactoryPassword)
         val artifactoryUrl = "$artifactoryBaseUrl:$artifactoryPort"
-        val systemApiService = SystemApiService(artifactoryUser, artifactoryUrl)
-        systemApiService.waitForSuccessfulStartup()
+        if (manageArtifactory) {
+            logger.info("Loading Artifactory license.")
+            if (artifactoryLicensePath.isBlank()) {
+                throw IntegrationException("You have chosen to let automation manage Artifactory, but a license key file path was not supplied.")
+            }
+            val artifactoryLicenseFile = File(artifactoryLicensePath)
+            val licenseText = FileInputStream(artifactoryLicenseFile)
+                .convertToString()
+                .replace("\n", "")
+                .replace(" ", "")
 
-        logger.info("Applying Artifactory license.")
-        systemApiService.applyLicense(licenseText)
+            logger.info("Installing and starting Artifactory version: $artifactoryVersion")
+            val containerHash = dockerService.installAndStartArtifactory(artifactoryVersion, artifactoryPort)
+            logger.info("Artifactory container: $containerHash")
+
+            logger.info("Waiting for Artifactory startup.")
+            val systemApiService = SystemApiService(artifactoryUser, artifactoryUrl)
+            systemApiService.waitForSuccessfulStartup()
+
+            logger.info("Applying Artifactory license.")
+            systemApiService.applyLicense(licenseText)
+        } else {
+            logger.info("Skipping Artifactory installation.")
+        }
     }
 }
 
