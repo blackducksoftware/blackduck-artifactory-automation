@@ -33,18 +33,18 @@ fun main() {
 }
 
 class Application(
-    private val dockerService: DockerService,
-    private val artifactoryBaseUrl: String,
-    private val artifactoryPort: String,
-    private val artifactoryUsername: String,
-    private val artifactoryPassword: String,
-    private val artifactoryVersion: String,
-    private val artifactoryLicensePath: String,
-    private val blackduckUrl: String,
-    private val blackDuckUsername: String,
-    private val blackDuckPassword: String,
-    private val blackDuckTrustCert: Boolean,
-    private val manageArtifactory: Boolean
+    dockerService: DockerService,
+    artifactoryBaseUrl: String,
+    artifactoryPort: String,
+    artifactoryUsername: String,
+    artifactoryPassword: String,
+    artifactoryVersion: String,
+    artifactoryLicensePath: String,
+    blackduckUrl: String,
+    blackDuckUsername: String,
+    blackDuckPassword: String,
+    blackDuckTrustCert: Boolean,
+    manageArtifactory: Boolean
 ) {
     private val logger: IntLogger = Slf4jIntLogger(LoggerFactory.getLogger(this.javaClass))
 
@@ -57,7 +57,7 @@ class Application(
             .setTrustCert(blackDuckTrustCert)
             .build()
         if (!blackDuckServerConfig.canConnect(logger)) {
-            // throw IntegrationException("Failed to connect the Black Duck server at $blackduckUrl.")
+            throw IntegrationException("Failed to connect the Black Duck server at $blackduckUrl.")
         }
 
         val artifactoryUser = ArtifactoryUser(artifactoryUsername, artifactoryPassword)
