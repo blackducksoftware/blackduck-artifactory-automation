@@ -14,7 +14,7 @@ class DockerService {
             throw IntegrationException("Failed to install artifactory. Docker returned an exit code of ${artifactoryInstallProcess.exitValue()}")
         }
 
-        val startArtifactoryProcess = startArtifactory(version, artifactoryPort)
+        val startArtifactoryProcess = startArtifactory(version, artifactoryPort, false)
         startArtifactoryProcess.waitFor(3, TimeUnit.MINUTES)
         if (startArtifactoryProcess.exitValue() != 0) {
             throw IntegrationException("Failed to start artifactory. Docker returned an exit code of ${startArtifactoryProcess.exitValue()}")
@@ -24,17 +24,19 @@ class DockerService {
     }
 
     fun installArtifactory(version: String): Process {
-        return runDockerCommand("docker", "pull", "docker.bintray.io/jfrog/artifactory-pro:$version")
+        return runCommand("docker", "pull", "docker.bintray.io/jfrog/artifactory-pro:$version")
     }
 
-    fun startArtifactory(version: String, artifactoryPort: String): Process {
-        return runDockerCommand("docker", "run", "--name", "artifactory-automation-$version", "-d", "-p", "$artifactoryPort:$artifactoryPort", "docker.bintray.io/jfrog/artifactory-pro:$version")
+    fun startArtifactory(version: String, artifactoryPort: String, inheritIO: Boolean = true): Process {
+        return runCommand("docker", "run", "--name", "artifactory-automation-$version", "-d", "-p", "$artifactoryPort:$artifactoryPort", "docker.bintray.io/jfrog/artifactory-pro:$version", inheritIO = inheritIO)
     }
 
-    private fun runDockerCommand(vararg command: String): Process {
+    private fun runCommand(vararg command: String, inheritIO: Boolean = true): Process {
         logger.info("Running command: " + StringUtils.join(command, " "))
         val processBuilder = ProcessBuilder(*command)
-        processBuilder.inheritIO()
+        if (inheritIO) {
+            processBuilder.inheritIO()
+        }
         return processBuilder.start()
     }
 }
