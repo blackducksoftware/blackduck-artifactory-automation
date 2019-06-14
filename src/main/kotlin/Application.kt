@@ -1,5 +1,6 @@
 import artifactory.api.ArtifactoryUser
 import artifactory.api.SystemApiService
+import com.github.kittinunf.fuel.core.FuelManager
 import com.synopsys.integration.blackduck.configuration.BlackDuckServerConfigBuilder
 import com.synopsys.integration.exception.IntegrationException
 import com.synopsys.integration.log.IntLogger
@@ -61,7 +62,10 @@ class Application(
         }
 
         val artifactoryUser = ArtifactoryUser(artifactoryUsername, artifactoryPassword)
-        val artifactoryUrl = "$artifactoryBaseUrl:$artifactoryPort"
+        val artifactoryUrl = "$artifactoryBaseUrl:$artifactoryPort/artifactory"
+        val fuelManager = FuelManager()
+        fuelManager.basePath = artifactoryUrl
+
         if (manageArtifactory) {
             logger.info("Loading Artifactory license.")
             if (artifactoryLicensePath.isBlank()) {
@@ -78,7 +82,7 @@ class Application(
             logger.info("Artifactory container: $containerHash")
 
             logger.info("Waiting for Artifactory startup.")
-            val systemApiService = SystemApiService(artifactoryUser, artifactoryUrl)
+            val systemApiService = SystemApiService(fuelManager, artifactoryUser)
             systemApiService.waitForSuccessfulStartup()
 
             logger.info("Applying Artifactory license.")

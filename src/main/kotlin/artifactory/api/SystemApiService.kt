@@ -1,20 +1,19 @@
 package artifactory.api
 
+import com.github.kittinunf.fuel.core.FuelManager
 import com.github.kittinunf.fuel.core.Response
 import com.github.kittinunf.fuel.core.extensions.jsonBody
-import com.github.kittinunf.fuel.httpGet
-import com.github.kittinunf.fuel.httpPost
 import com.github.kittinunf.result.failure
 import com.github.kittinunf.result.success
 import com.synopsys.integration.exception.IntegrationException
 import com.synopsys.integration.log.Slf4jIntLogger
 import org.slf4j.LoggerFactory
 
-class SystemApiService(artifactoryUser: ArtifactoryUser, baseUrl: String) : ArtifactoryApiService(artifactoryUser, baseUrl) {
+class SystemApiService(fuelManager: FuelManager, artifactoryUser: ArtifactoryUser) : ArtifactoryApiService(fuelManager, artifactoryUser) {
     private val logger = Slf4jIntLogger(LoggerFactory.getLogger(this.javaClass))
 
     fun applyLicense(license: String): Response {
-        return "/api/system/licenses".httpPost()
+        return fuelManager.post("/api/system/licenses")
             .authenticate()
             .jsonBody("{ \"licenseKey\": \"$license\" }")
             .response { response ->
@@ -26,7 +25,7 @@ class SystemApiService(artifactoryUser: ArtifactoryUser, baseUrl: String) : Arti
     }
 
     fun pingArtifactory(): Response {
-        return "/api/system/ping".httpGet()
+        return fuelManager.get("/api/system/ping")
             .response { response ->
                 response.failure { logger.warn(it.exception.message) }
                 response.success { logger.info("Artifactory successfully started.") }

@@ -1,6 +1,7 @@
 package artifactory.api
 
 import artifactory.api.model.PackageType
+import com.github.kittinunf.fuel.core.FuelManager
 import com.github.kittinunf.fuel.core.Response
 import com.github.kittinunf.fuel.gson.jsonBody
 import com.github.kittinunf.fuel.gson.responseObject
@@ -12,7 +13,7 @@ import com.google.gson.annotations.SerializedName
 import com.synopsys.integration.log.Slf4jIntLogger
 import org.slf4j.LoggerFactory
 
-class RepositoriesApiService(artifactoryUser: ArtifactoryUser, baseUrl: String) : ArtifactoryApiService(artifactoryUser, baseUrl) {
+class RepositoriesApiService(fuelManager: FuelManager, artifactoryUser: ArtifactoryUser) : ArtifactoryApiService(fuelManager, artifactoryUser) {
     private val logger = Slf4jIntLogger(LoggerFactory.getLogger(javaClass))
 
     fun createRepository(key: String, repositoryType: RepositoryType, packageType: PackageType, remoteUrl: String = packageType.remoteUrl, externalDependenciesEnabled: Boolean = false): Response {
