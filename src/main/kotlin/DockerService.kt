@@ -20,7 +20,7 @@ class DockerService {
             throw IntegrationException("Failed to start artifactory. Docker returned an exit code of ${startArtifactoryProcess.exitValue()}")
         }
 
-        return startArtifactoryProcess.inputStream.convertToString()
+        return startArtifactoryProcess.inputStream.convertToString().trim()
     }
 
     fun installArtifactory(version: String): Process {
