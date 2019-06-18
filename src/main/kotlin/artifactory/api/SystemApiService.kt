@@ -9,12 +9,11 @@ import com.synopsys.integration.exception.IntegrationException
 import com.synopsys.integration.log.Slf4jIntLogger
 import org.slf4j.LoggerFactory
 
-class SystemApiService(fuelManager: FuelManager, artifactoryUser: ArtifactoryUser) : ArtifactoryApiService(fuelManager, artifactoryUser) {
+class SystemApiService(fuelManager: FuelManager) : ArtifactoryApiService(fuelManager) {
     private val logger = Slf4jIntLogger(LoggerFactory.getLogger(this.javaClass))
 
     fun applyLicense(license: String): Response {
         return fuelManager.post("/api/system/licenses")
-            .authenticate()
             .jsonBody("{ \"licenseKey\": \"$license\" }")
             .response { response ->
                 response.failure { logger.warn(it.exception.message) }

@@ -1,17 +1,16 @@
 package artifactory.api
 
-import com.github.kittinunf.fuel.core.*
-import com.github.kittinunf.fuel.core.extensions.authentication
+import com.github.kittinunf.fuel.core.FuelManager
+import com.github.kittinunf.fuel.core.Response
+import com.github.kittinunf.fuel.core.isClientError
+import com.github.kittinunf.fuel.core.isServerError
 import com.synopsys.integration.exception.IntegrationException
 
+
+// TODO: Do away with this class.
 abstract class ArtifactoryApiService(
-    internal val fuelManager: FuelManager,
-    private val artifactoryUser: ArtifactoryUser
-) {
-    fun Request.authenticate(): Request {
-        return this.authentication().basic(artifactoryUser.username, artifactoryUser.password)
-    }
-}
+    internal val fuelManager: FuelManager
+)
 
 fun Response.validate(): Response {
     if (this.isClientError || this.isServerError || this.statusCode < 0) {
@@ -19,5 +18,3 @@ fun Response.validate(): Response {
     }
     return this
 }
-
-data class ArtifactoryUser(val username: String, val password: String)

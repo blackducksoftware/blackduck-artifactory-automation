@@ -19,16 +19,16 @@ import javax.xml.transform.stream.StreamResult
 
 class BlackDuckPluginService(private val dockerService: DockerService) {
     private val logger = Slf4jIntLogger(LoggerFactory.getLogger(javaClass))
-    private val artifactoryEtcDirectory = "/opt/jfrog/artifactory/etc"
-    private val dockerPluginsDirectory = "$artifactoryEtcDirectory/plugins"
 
-    fun installPlugin(containerHash: String, zipFile: File, blackDuckServerConfig: BlackDuckServerConfig, pluginLoggingLevel: String) {
+    val artifactoryEtcDirectory = "/opt/jfrog/artifactory/etc"
+    val dockerPluginsDirectory = "$artifactoryEtcDirectory/plugins"
+
+    fun installPlugin(containerHash: String, zipFile: File): File {
         logger.info("Shutting down Artifactory container.")
         dockerService.stopArtifactory(containerHash).waitFor()
 
         logger.info("Unzipping plugin.")
         val unzippedPluginDirectory = unzipFile(zipFile, File(zipFile.parentFile, "output"))
-        val propertiesFile = File(unzippedPluginDirectory, "lib/blackDuckPlugin.properties")
 
         logger.info("Uploading plugin files.")
         unzippedPluginDirectory.listFiles()
@@ -37,24 +37,10 @@ class BlackDuckPluginService(private val dockerService: DockerService) {
                 dockerService.uploadFile(containerHash, it, dockerPluginsDirectory).waitFor()
             }
 
-        logger.info("Rewriting properties.")
-        initializeProperties(containerHash, propertiesFile, blackDuckServerConfig)
-
-        logger.info("Updating logback.xml for logger purposes.")
-        val logbackXmlFile = File(unzippedPluginDirectory, "logback.xml")
-        val logbackXmlLocation = "$artifactoryEtcDirectory/logback.xml"
-        dockerService.downloadFile(containerHash, logbackXmlFile, logbackXmlLocation).waitFor()
-        updateLogbackXml(logbackXmlFile, pluginLoggingLevel)
-        dockerService.uploadFile(containerHash, logbackXmlFile, logbackXmlLocation).waitFor()
-
-        logger.info("Starting Artifactory container.")
-        dockerService.startArtifactory(containerHash).waitFor()
-
-        fixPermissions(containerHash, dockerPluginsDirectory)
-        fixPermissions(containerHash, logbackXmlLocation, "0644")
+        return unzippedPluginDirectory
     }
 
-    private fun updateLogbackXml(xmlFile: File, loggingLevel: String) {
+    fun updateLogbackXml(xmlFile: File, loggingLevel: String) {
         val dbFactory = DocumentBuilderFactory.newInstance()
         val dBuilder = dbFactory.newDocumentBuilder()
         val document = dBuilder.parse(xmlFile)
@@ -80,7 +66,7 @@ class BlackDuckPluginService(private val dockerService: DockerService) {
         transformer.transform(DOMSource(document), StreamResult(xmlFile))
     }
 
-    private fun initializeProperties(containerHash: String, propertiesFile: File, blackDuckServerConfig: BlackDuckServerConfig) {
+    fun initializeProperties(containerHash: String, propertiesFile: File, blackDuckServerConfig: BlackDuckServerConfig) {
         val credentialsOptional = blackDuckServerConfig.credentials
         var username = ""
         var password = ""
@@ -105,7 +91,7 @@ class BlackDuckPluginService(private val dockerService: DockerService) {
         )
     }
 
-    private fun updateProperties(containerHash: String, propertiesFile: File, vararg propertyPairs: Pair<ConfigurationProperty, String>) {
+    fun updateProperties(containerHash: String, propertiesFile: File, vararg propertyPairs: Pair<ConfigurationProperty, String>) {
         val properties = Properties()
         val propertiesInputStream = propertiesFile.inputStream()
         properties.load(propertiesInputStream)
@@ -117,7 +103,7 @@ class BlackDuckPluginService(private val dockerService: DockerService) {
 
         properties.store(FileOutputStream(propertiesFile), "Modified automation properties")
 
-        dockerService.uploadFile(containerHash, propertiesFile, "$dockerPluginsDirectory/lib/")
+        dockerService.uploadFile(containerHash, propertiesFile, "$dockerPluginsDirectory/lib/").waitFor()
     }
 
     fun fixPermissions(containerHash: String, location: String, permission: String = "0755") {

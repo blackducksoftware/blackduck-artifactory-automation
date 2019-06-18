@@ -1,6 +1,9 @@
-import artifactory.api.ArtifactoryUser
+import artifactory.RepositoryManager
+import artifactory.api.BlackDuckPluginApiService
+import artifactory.api.RepositoriesApiService
 import artifactory.api.SystemApiService
 import com.github.kittinunf.fuel.core.FuelManager
+import com.github.kittinunf.fuel.core.extensions.authentication
 import com.synopsys.integration.blackduck.configuration.BlackDuckServerConfigBuilder
 import com.synopsys.integration.exception.IntegrationException
 import com.synopsys.integration.log.IntLogger
@@ -8,7 +11,10 @@ import com.synopsys.integration.log.Slf4jIntLogger
 import docker.DockerService
 import org.apache.commons.io.IOUtils
 import org.slf4j.LoggerFactory
+import plugin.BlackDuckPluginManager
 import plugin.BlackDuckPluginService
+import test.TestRunner
+import test.inspection.RepositoryInitializationTest
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -67,10 +73,10 @@ class Application(
             throw IntegrationException("Failed to connect the Black Duck server at $blackduckUrl.")
         }
 
-        val artifactoryUser = ArtifactoryUser(artifactoryUsername, artifactoryPassword)
         val artifactoryUrl = "$artifactoryBaseUrl:$artifactoryPort/artifactory"
         val fuelManager = FuelManager()
         fuelManager.basePath = artifactoryUrl
+        fuelManager.addRequestInterceptor { { it.authentication().basic(artifactoryUsername, artifactoryPassword) } }
 
         if (manageArtifactory) {
             logger.info("Loading Artifactory license.")
@@ -94,7 +100,7 @@ class Application(
             logger.info("Artifactory container: $containerHash")
 
             logger.info("Waiting for Artifactory startup.")
-            val systemApiService = SystemApiService(fuelManager, artifactoryUser)
+            val systemApiService = SystemApiService(fuelManager)
             systemApiService.waitForSuccessfulStartup()
 
             logger.info("Applying Artifactory license.")
@@ -102,10 +108,19 @@ class Application(
 
             logger.info("Installing plugin.")
             val blackDuckPluginService = BlackDuckPluginService(dockerService)
-            blackDuckPluginService.installPlugin(containerHash, pluginZipFile, blackDuckServerConfig, pluginLoggingLevel)
+            val blackDuckPluginApiService = BlackDuckPluginApiService(fuelManager)
+            val blackDuckPluginManager = BlackDuckPluginManager(containerHash, pluginZipFile, blackDuckServerConfig, pluginLoggingLevel, blackDuckPluginService, blackDuckPluginApiService, dockerService)
             logger.info("Successfully installed the plugin.")
 
             println(dockerService.getArtifactoryLogs(containerHash).convertToString())
+
+            val repositoriesApiService = RepositoriesApiService(fuelManager)
+            val repositoryManager = RepositoryManager(repositoriesApiService)
+
+            val test = RepositoryInitializationTest(repositoryManager, blackDuckPluginManager)
+            val testRunner = TestRunner(mutableListOf(test))
+            val testResults = testRunner.runTests()
+            testResults.forEach { println(it) }
         } else {
             logger.info("Skipping Artifactory installation.")
         }

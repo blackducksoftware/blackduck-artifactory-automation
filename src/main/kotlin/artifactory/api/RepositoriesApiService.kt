@@ -13,7 +13,7 @@ import com.google.gson.annotations.SerializedName
 import com.synopsys.integration.log.Slf4jIntLogger
 import org.slf4j.LoggerFactory
 
-class RepositoriesApiService(fuelManager: FuelManager, artifactoryUser: ArtifactoryUser) : ArtifactoryApiService(fuelManager, artifactoryUser) {
+class RepositoriesApiService(fuelManager: FuelManager) : ArtifactoryApiService(fuelManager) {
     private val logger = Slf4jIntLogger(LoggerFactory.getLogger(javaClass))
 
     fun createRepository(key: String, repositoryType: RepositoryType, packageType: PackageType, remoteUrl: String = packageType.remoteUrl, externalDependenciesEnabled: Boolean = false): Response {
@@ -23,7 +23,6 @@ class RepositoriesApiService(fuelManager: FuelManager, artifactoryUser: Artifact
 
     fun createRepository(repositoryConfiguration: RepositoryConfiguration): Response {
         return "/api/repositories/${repositoryConfiguration.key}".httpPut()
-            .authenticate()
             .jsonBody(repositoryConfiguration)
             .response { response ->
                 response.failure { logger.warn(it.exception.message) }
@@ -35,7 +34,6 @@ class RepositoriesApiService(fuelManager: FuelManager, artifactoryUser: Artifact
 
     fun getRepository(repositoryKey: String): RepositoryConfiguration {
         return "/api/repositories/$repositoryKey".httpGet()
-            .authenticate()
             .responseObject<RepositoryConfiguration>()
             .third.get()
     }
