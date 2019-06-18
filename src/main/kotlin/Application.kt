@@ -76,7 +76,7 @@ class Application(
         if (manageArtifactory) {
             logger.info("Loading Artifactory license.")
             if (!artifactoryLicenseFile.exists()) {
-                throw IntegrationException("You have chosen to let automation manage Artifactory, but a the license key file supplied at ${artifactoryLicenseFile.absolutePath} does not exist.")
+                throw IntegrationException("You have chosen to let automation manage Artifactory, but a the ARTIFACTORY_LICENSE_PATH supplied at ${artifactoryLicenseFile.absolutePath} does not exist.")
             }
             val licenseText = FileInputStream(artifactoryLicenseFile)
                 .convertToString()
