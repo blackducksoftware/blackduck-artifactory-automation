@@ -1,5 +1,4 @@
 import artifactory.api.ArtifactoryUser
-import artifactory.api.PluginsApiService
 import artifactory.api.SystemApiService
 import com.github.kittinunf.fuel.core.FuelManager
 import com.synopsys.integration.blackduck.configuration.BlackDuckServerConfigBuilder
@@ -92,7 +91,6 @@ class Application(
 
             logger.info("Installing and starting Artifactory version: $artifactoryVersion")
             val containerHash = dockerService.installAndStartArtifactory(artifactoryVersion, artifactoryPort)
-//            val containerHash = "artifactory-automation-latest"
             logger.info("Artifactory container: $containerHash")
 
             logger.info("Waiting for Artifactory startup.")
@@ -103,11 +101,8 @@ class Application(
             systemApiService.applyLicense(licenseText)
 
             logger.info("Installing plugin.")
-            val pluginsApiService = PluginsApiService(fuelManager, artifactoryUser)
             val blackDuckPluginService = BlackDuckPluginService(dockerService)
             blackDuckPluginService.installPlugin(containerHash, pluginZipFile, blackDuckServerConfig, pluginLoggingLevel)
-            //Thread.sleep(10000L)
-            //pluginsApiService.reloadPlugins()
             logger.info("Successfully installed the plugin.")
 
             println(dockerService.getArtifactoryLogs(containerHash).convertToString())
